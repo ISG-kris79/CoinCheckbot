@@ -14,6 +14,8 @@ public sealed class ScalpResult
     public required DateTime LastTime { get; init; }
 
     public required ScalpDecision Decision { get; init; }
+    /// <summary>진입 방향 (진입일 때 의미)</summary>
+    public TradeSide Side { get; init; } = TradeSide.Long;
     /// <summary>진입 후보 정렬용 품질 0~100 (진입일 때만 높음)</summary>
     public required int Quality { get; init; }
     /// <summary>발동한 진입 트리거 (없으면 대기/회피 사유)</summary>
@@ -36,7 +38,7 @@ public sealed class ScalpResult
 
     public string DecisionText => Decision switch
     {
-        ScalpDecision.Enter => "진입",
+        ScalpDecision.Enter => Side == TradeSide.Long ? "롱 진입" : "숏 진입",
         ScalpDecision.Wait => "대기",
         _ => "회피"
     };
@@ -101,6 +103,11 @@ public static class ScalpEngine
 
         var reasons = new List<string>();
         if (ctxUp) reasons.Add(e50Rising ? "상승추세(EMA정배열·50상승)" : "상승추세(EMA정배열)");
+
+        // ── 하락추세면 숏 경로로 판정 (롱은 회피, 숏 트리거 평가) ──
+        if (ctxDown)
+            return EvaluateShort(symbol, interval, candles, last, price, c0, rng0, bull0,
+                ema20, ema50, rsi, stoch, atr, e20, e50);
 
         // ── 2) 실격 사유(회피) ──────────────────────────────────────
         // (a) 칼받기: 현재 강한 음봉 / 직전 저가 이탈 / 급락 진행
@@ -258,8 +265,147 @@ public static class ScalpEngine
         };
     }
 
+    // ───────────────────────── 숏(하락) 경로 ─────────────────────────
+    private static ScalpResult EvaluateShort(string symbol, string interval, IReadOnlyList<Candle> candles,
+        int last, double price, Candle c0, double rng0, bool bull0,
+        double[] ema20, double[] ema50, double[] rsi, Ind.StochResult stoch, double atr, double e20, double e50)
+    {
+        var close = candles.Select(c => c.Close).ToArray();
+        var high = candles.Select(c => c.High).ToArray();
+        var low = candles.Select(c => c.Low).ToArray();
+        var vol = candles.Select(c => c.Volume).ToArray();
+        double r = Get(rsi, last), rPrev = Get(rsi, last - 1);
+        double k = Get(stoch.K, last), d = Get(stoch.D, last), kPrev = Get(stoch.K, last - 1), dPrev = Get(stoch.D, last - 1);
+
+        var reasons = new List<string> { "하락추세(EMA 역배열)" };
+
+        bool belowEma20 = !double.IsNaN(e20) && price < e20;
+        double extBelow = (!double.IsNaN(e20) && atr > 0) ? (e20 - price) / atr : 0;
+        bool notExtended = extBelow < 2.5;          // EMA20 아래로 2.5 ATR 넘으면 추격 구간
+        bool oversold = !double.IsNaN(r) && r <= 28;
+
+        // EMA20×EMA50 데드크로스 최근?
+        int dcBar = -1;
+        for (int i = last; i >= Math.Max(1, last - 20); i--)
+        {
+            double a = Get(ema20, i), b = Get(ema50, i), ap = Get(ema20, i - 1), bp = Get(ema50, i - 1);
+            if (!double.IsNaN(a) && !double.IsNaN(ap) && a < b && ap >= bp) { dcBar = i; break; }
+        }
+        bool recentDeadCross = dcBar >= 0 && (last - dcBar) <= 18 && !double.IsNaN(e20) && e20 < e50;
+
+        // 숏 스퀴즈 회피: 현재 강한 양봉 / 직전 고가 돌파(급등)
+        double bullBody = (bull0 && rng0 > 0) ? (c0.Close - c0.Open) / rng0 : 0;
+        bool squeeze = (bull0 && bullBody >= 0.55) || (last >= 1 && c0.Close > candles[last - 1].High);
+
+        // 바닥 반등 증거(강세 다이버전스/아랫꼬리): 숏 회피
+        double bdiv = 0;
+        int recTr = ArgMinLow(low, last - 4, last), preTr = ArgMinLow(low, last - 18, last - 6);
+        if (recTr >= 0 && preTr >= 0 && low[recTr] < low[preTr])
+        {
+            double rA = Get(rsi, recTr), rB = Get(rsi, preTr);
+            if (!double.IsNaN(rA) && !double.IsNaN(rB) && rA > rB + 2) bdiv = Math.Clamp((rA - rB) / 12.0, 0, 1);
+        }
+        double lowerWick = rng0 > 0 ? Math.Clamp(((Math.Min(c0.Open, c0.Close) - c0.Low) / rng0 - 0.45) / 0.4, 0, 1) : 0;
+        double rollUp = (!double.IsNaN(r) && !double.IsNaN(rPrev) && rPrev <= 28 && r > rPrev) ? 1 : 0;
+        bool bottomReversal = (bdiv >= 0.4 && (lowerWick >= 0.3 || rollUp > 0)) || (lowerWick >= 0.6 && r <= 35);
+
+        // ── 숏 트리거 ──
+        string trigger = ""; double trigStrength = 0;
+        double swingHigh = MaxHigh(high, last - 5, last);
+        double rangeHi = MaxHigh(high, last - 20, last);
+        double rangeLo = MinLow(low, last - 20, last - 2);
+
+        if (belowEma20 && !squeeze)
+        {
+            // (S0) 데드크로스 초입: 되돌림(양봉) 후 현재 음봉이 EMA20 아래로 마감
+            bool recentPop = false;
+            for (int i = last - 1; i >= Math.Max(0, last - 4); i--) if (candles[i].Close > candles[i].Open) recentPop = true;
+            if (recentDeadCross && notExtended && !bull0 && c0.Close < e20 && recentPop && r > 32)
+            { trigger = "데드크로스 초입 반락 숏(EMA20)"; trigStrength = 0.95; reasons.Add($"EMA20<50 데드크로스 {last - dcBar}봉 전 + 되돌림 후 음봉(EMA20 아래)"); }
+
+            // (S1) EMA20 저항 반락: 되돌려 EMA20 부근 닿았다가 음봉
+            if (trigger.Length == 0 && !double.IsNaN(e20) && MaxHigh(high, last - 3, last) >= e20 * 0.996 && !bull0 && c0.Close < e20)
+            { trigger = "EMA20 저항 반락 숏"; trigStrength = 0.85; reasons.Add("EMA20 저항 확인 후 음봉"); }
+
+            // (S2) 과매수 반락: RSI 되돌림 고점에서 꺾임 + 음봉, 또는 스토캐스틱 하향교차
+            if (trigger.Length == 0)
+            {
+                bool rsiTurn = !double.IsNaN(r) && !double.IsNaN(rPrev) && rPrev >= 58 && r < rPrev && !bull0;
+                bool stochTurn = !double.IsNaN(k) && !double.IsNaN(d) && kPrev >= dPrev && k < d && k > 65;
+                if (rsiTurn || stochTurn) { trigger = "과매수 반락 숏"; trigStrength = 0.8; reasons.Add("되돌림 과매수 반락"); }
+            }
+
+            // (S3) 붕괴 후 재테스트: 지지 붕괴 뒤 그 부근 되돌림에서 음봉
+            if (trigger.Length == 0 && !double.IsNaN(rangeLo))
+            {
+                bool retest = price <= rangeLo * 1.001 && MaxHigh(high, last - 2, last) >= rangeLo * 0.996 && !bull0;
+                if (retest) { trigger = "지지 붕괴 후 재테스트 숏"; trigStrength = 0.75; reasons.Add("지지 붕괴 후 저항 확인"); }
+            }
+
+            // (S4) 저항 반락: 박스 고점 부근 음봉
+            if (trigger.Length == 0)
+            {
+                bool nearRes = c0.High >= rangeHi * 0.99;
+                bool reject = !bull0 && c0.Close < (c0.High + c0.Low) / 2;
+                if (nearRes && reject) { trigger = "저항선 반락 숏"; trigStrength = 0.6; reasons.Add("박스 고점 저항 반락"); }
+            }
+        }
+
+        double avgVol = AvgVolume(vol, last, 20);
+        bool volOk = avgVol > 0 && vol[last] >= avgVol * 1.2;
+        if (volOk) reasons.Add($"거래량 증가({vol[last] / avgVol * 100:F0}%)");
+        var bearPatterns = PatternEngine.Detect(candles).Where(p => p.Detected && p.Direction == Bias.Bear).Select(p => p.Name).ToList();
+        foreach (var pn in bearPatterns) reasons.Add($"📐{pn}");
+
+        // 손익비/안전 (숏: 손절 위, 목표 아래)
+        double stop = Math.Max(swingHigh, price + atr * 0.8) + atr * 0.1;
+        double risk = stop - price;
+        double target = price - Math.Max(risk * 1.8, atr * 1.5);
+        double rr = risk > 0 ? (price - target) / risk : 0;
+        bool rrOk = rr >= 1.3 && risk > atr * 0.15 && risk <= atr * 2.5;
+
+        ScalpDecision decision; string note;
+        if (squeeze) { decision = ScalpDecision.Avoid; note = "급등/신고가 진행 — 숏 회피(스퀴즈 위험)"; }
+        else if (bottomReversal) { decision = ScalpDecision.Avoid; note = "바닥 반등 증거(다이버전스/거부) — 숏 회피"; }
+        else if (!belowEma20) { decision = ScalpDecision.Wait; note = "EMA20 위 — 숏은 20일선 아래에서"; }
+        else if (!notExtended || oversold) { decision = ScalpDecision.Wait; note = $"EMA20 -{extBelow:F1}ATR 과확장/과매도 — 추격 금지, 반등 대기"; }
+        else if (trigger.Length > 0 && rrOk) { decision = ScalpDecision.Enter; note = trigger; }
+        else if (trigger.Length > 0) { decision = ScalpDecision.Wait; note = "숏 트리거 있으나 손익비/거리 부적합 — 대기"; }
+        else { decision = ScalpDecision.Wait; note = "하락추세지만 숏 트리거 없음 — 반등 후 대기"; }
+
+        int quality;
+        if (decision == ScalpDecision.Enter)
+        {
+            double q = 55 + trigStrength * 25;
+            if (volOk) q += 6;
+            if (bearPatterns.Count > 0) q += 5;
+            q += Math.Min(6, (rr - 1.3) * 4);
+            quality = (int)Math.Clamp(Math.Round(q), 0, 100);
+        }
+        else if (decision == ScalpDecision.Wait) quality = 35;
+        else quality = Math.Max(0, 18 - (squeeze ? 10 : 0));
+
+        if (reasons.Count == 0) reasons.Add(note);
+
+        return new ScalpResult
+        {
+            Symbol = symbol, Interval = interval, Price = price, LastTime = c0.OpenTime,
+            Decision = decision, Side = TradeSide.Short, Quality = quality, Trigger = note, Reasons = reasons,
+            Atr = atr, Entry = price, Target = target, Stop = stop
+        };
+    }
+
     // ───────────────────────── 보조 ─────────────────────────
     private static double Get(double[] arr, int i) => i >= 0 && i < arr.Length ? arr[i] : double.NaN;
+
+    private static int ArgMinLow(double[] low, int from, int to)
+    {
+        from = Math.Max(0, from); to = Math.Min(low.Length - 1, to);
+        if (from > to) return -1;
+        int idx = from; double mn = low[from];
+        for (int i = from + 1; i <= to; i++) if (low[i] < mn) { mn = low[i]; idx = i; }
+        return idx;
+    }
 
     private static double AvgVolume(double[] vol, int last, int period)
     {

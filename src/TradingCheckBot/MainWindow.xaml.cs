@@ -233,21 +233,24 @@ public partial class MainWindow : Window
         var accent = (Brush)FindResource("AccentBrush");
         var muted = (Brush)FindResource("MutedBrush");
 
+        var bear = (Brush)FindResource("BearBrush");
+        bool isLong = s.Side == TradeSide.Long;
         ScalpVerdict.Text = s.Decision switch
         {
-            ScalpDecision.Enter => $"단타 진입 ✅ (품질 {s.Quality})",
+            ScalpDecision.Enter => isLong ? $"롱 진입 ✅ (품질 {s.Quality})" : $"숏 진입 🔻 (품질 {s.Quality})",
             ScalpDecision.Wait => "단타 대기 ⏳",
             _ => "단타 회피 ⛔"
         };
         ScalpVerdict.Foreground = s.Decision switch
         {
-            ScalpDecision.Enter => bull,
+            ScalpDecision.Enter => isLong ? bull : bear,
             ScalpDecision.Wait => accent,
             _ => muted
         };
         ScalpBanner.Background = s.Decision switch
         {
-            ScalpDecision.Enter => new SolidColorBrush(Color.FromArgb(40, 38, 166, 154)),
+            ScalpDecision.Enter => isLong ? new SolidColorBrush(Color.FromArgb(40, 38, 166, 154))
+                                          : new SolidColorBrush(Color.FromArgb(40, 239, 83, 80)),
             ScalpDecision.Wait => new SolidColorBrush(Color.FromArgb(36, 240, 185, 11)),
             _ => new SolidColorBrush(Color.FromArgb(34, 0, 0, 0))
         };

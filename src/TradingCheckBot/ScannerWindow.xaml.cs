@@ -214,22 +214,22 @@ public partial class ScannerWindow : Window
         var muted = (Brush)FindResource("MutedBrush");
         var accent = (Brush)FindResource("AccentBrush");
 
-        Brush tier = r.Score switch
-        {
-            >= 65 => bull,
-            >= 45 => accent,
-            >= 25 => new SolidColorBrush(Color.FromRgb(0x6B, 0xCB, 0x77)),
-            _ => muted
-        };
+        bool isLong = r.Side == TradeSide.Long;
+        // 롱=초록 계열, 숏=빨강 계열 (점수 낮으면 흐리게)
+        Brush tier = r.Score >= 45 ? (isLong ? bull : bear) : muted;
+        // 방향 부호: 롱은 +상승률, 숏은 -하락률
+        string moveTxt = isLong ? $"+{r.ExpectedMovePct:F1}%" : $"-{r.ExpectedMovePct:F1}%";
 
         double chg = t?.PriceChangePercent ?? 0;
-        string winTxt = r.Samples > 0 ? $"승률 {r.WinRate:F0}% · 표본 {r.Samples} · 손익비 1:{r.RiskReward:F1}" : "과거표본 부족(셋업 기준)";
+        string winTxt = r.Samples > 0
+            ? $"{r.SideText} · 승률 {r.WinRate:F0}% · 표본 {r.Samples} · 손익비 1:{r.RiskReward:F1}"
+            : $"{r.SideText} · 과거표본 부족(셋업 기준)";
         return new ScalpRow
         {
             Symbol = r.Symbol,
-            Order = 0,
+            Order = isLong ? 0 : 1, // 동점 시 롱 먼저
             Score = (int)Math.Round(r.Score),
-            Grade = $"{r.Tier} +{r.ExpectedRisePct:F1}%",
+            Grade = $"{r.SideText} {r.Tier} {moveTxt}",
             GradeBrush = tier,
             BarWidth = 146.0 * Math.Clamp(r.Score, 0, 100) / 100.0,
             ChangeText = $"24h {(chg >= 0 ? "+" : "")}{chg:F2}%",
@@ -343,12 +343,9 @@ public partial class ScannerWindow : Window
         var muted = (Brush)FindResource("MutedBrush");
         var accent = (Brush)FindResource("AccentBrush");
 
-        Brush decBrush = r.Decision switch
-        {
-            ScalpDecision.Enter => bull,
-            ScalpDecision.Wait => accent,
-            _ => muted
-        };
+        Brush decBrush = r.Decision == ScalpDecision.Enter
+            ? (r.Side == TradeSide.Long ? bull : bear)
+            : r.Decision == ScalpDecision.Wait ? accent : muted;
 
         // 진입일 때만 손익비/레벨이 의미 있음
         string levels = r.Decision == ScalpDecision.Enter
