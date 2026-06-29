@@ -117,11 +117,11 @@
                     <!-- 선택 단축 버튼 -->
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Content="상위20" Click="SelectTop20_Click" Style="{StaticResource CaptionButton}"
-                                Width="Auto" Padding="10,4" Foreground="{StaticResource TextBrush}"/>
-                        <Button Content="전체" Click="SelectAll_Click" Style="{StaticResource CaptionButton}"
-                                Width="Auto" Padding="10,4" Foreground="{StaticResource TextBrush}"/>
-                        <Button Content="해제" Click="ClearSel_Click" Style="{StaticResource CaptionButton}"
-                                Width="Auto" Padding="10,4" Foreground="{StaticResource TextBrush}"/>
+                                Width="Auto" Padding="9,4" Foreground="{StaticResource TextBrush}"/>
+                        <Button Content="전체선택" Click="SelectAll_Click" Style="{StaticResource CaptionButton}"
+                                Width="Auto" Padding="9,4" Foreground="{StaticResource TextBrush}"/>
+                        <Button Content="전체해제" Click="ClearSel_Click" Style="{StaticResource CaptionButton}"
+                                Width="Auto" Padding="9,4" Foreground="{StaticResource TextBrush}"/>
                     </StackPanel>
 
                     <!-- 코인 체크리스트 -->
