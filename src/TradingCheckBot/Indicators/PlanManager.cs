@@ -154,7 +154,7 @@ public static class PlanManager
         {
             Symbol = s.Symbol, Interval = s.Interval, Price = s.Price, LastTime = s.LastTime,
             Decision = decision, Side = p.Side, Quality = p.Quality, Trigger = note, Reasons = reasons,
-            Atr = s.Atr, Entry = p.Entry, Target = p.Target, Stop = p.Stop
+            Atr = s.Atr, Entry = p.Entry, Target = p.Target, Stop = p.Stop, Warning = s.Warning
         };
     }
 

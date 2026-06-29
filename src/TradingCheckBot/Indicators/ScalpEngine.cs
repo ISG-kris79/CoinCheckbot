@@ -26,6 +26,8 @@ public sealed class ScalpResult
     public required double Entry { get; init; }
     public required double Target { get; init; }
     public required double Stop { get; init; }
+    /// <summary>상위 타임프레임 역추세 등 경고 (없으면 null)</summary>
+    public string? Warning { get; init; }
 
     public double RiskReward
     {
@@ -258,6 +260,15 @@ public static class ScalpEngine
         double planRisk = planEntry - planStop;
         double planTarget = planEntry + Math.Max(planRisk * 1.8, atr * 1.5);
 
+        // 상위 TF 역추세 경고 (판정은 유지)
+        string? warning = null;
+        var (hLabel, hRatio) = Higher(interval);
+        if (hRatio > 1 && HigherTrend(candles, interval) == Bias.Bear && decision != ScalpDecision.Avoid)
+        {
+            warning = $"⚠ {hLabel} 하락추세 역행 — 반등 짧을 수 있음";
+            reasons.Add(warning);
+        }
+
         return new ScalpResult
         {
             Symbol = symbol,
@@ -271,7 +282,8 @@ public static class ScalpEngine
             Atr = atr,
             Entry = planEntry,
             Target = planTarget,
-            Stop = planStop
+            Stop = planStop,
+            Warning = warning
         };
     }
 
@@ -404,12 +416,53 @@ public static class ScalpEngine
         double planRisk = planStop - planEntry;
         double planTarget = planEntry - Math.Max(planRisk * 1.8, atr * 1.5);
 
+        // 상위 TF 역추세 경고
+        string? warning = null;
+        var (hLabel, hRatio) = Higher(interval);
+        if (hRatio > 1 && HigherTrend(candles, interval) == Bias.Bull && decision != ScalpDecision.Avoid)
+        {
+            warning = $"⚠ {hLabel} 상승추세 역행 — 반락 짧을 수 있음";
+            reasons.Add(warning);
+        }
+
         return new ScalpResult
         {
             Symbol = symbol, Interval = interval, Price = price, LastTime = c0.OpenTime,
             Decision = decision, Side = TradeSide.Short, Quality = quality, Trigger = note, Reasons = reasons,
-            Atr = atr, Entry = planEntry, Target = planTarget, Stop = planStop
+            Atr = atr, Entry = planEntry, Target = planTarget, Stop = planStop, Warning = warning
         };
+    }
+
+    // ───────────────────────── 상위 타임프레임 추세 (리샘플링) ─────────────────────────
+    private static (string label, int ratio) Higher(string interval) => interval switch
+    {
+        "1m" => ("15m", 15),
+        "3m" => ("1h", 20),
+        "5m" => ("1h", 12),
+        "15m" => ("1h", 4),
+        "1h" => ("4h", 4),
+        "4h" => ("1d", 6),
+        _ => ("", 1)
+    };
+
+    /// <summary>현재 캔들을 상위 TF로 합쳐 EMA20 기준 추세를 구한다 (추가 요청 없음).</summary>
+    public static Bias HigherTrend(IReadOnlyList<Candle> candles, string interval)
+    {
+        int ratio = Higher(interval).ratio;
+        if (ratio <= 1) return Bias.Neutral;
+        int n = candles.Count;
+        var hc = new List<double>();
+        for (int end = n; end > 0; end -= ratio) hc.Add(candles[end - 1].Close);
+        hc.Reverse();
+        if (hc.Count < 25) return Bias.Neutral;
+        var ema20 = Ind.Ema(hc, 20);
+        int last = hc.Count - 1;
+        double e = ema20[last], ep = ema20[Math.Max(0, last - 2)];
+        if (double.IsNaN(e) || double.IsNaN(ep)) return Bias.Neutral;
+        double p = hc[last];
+        if (p > e && e >= ep) return Bias.Bull;
+        if (p < e && e <= ep) return Bias.Bear;
+        return Bias.Neutral;
     }
 
     // ───────────────────────── 보조 ─────────────────────────
