@@ -28,6 +28,7 @@ public partial class MainWindow : Window
 
     private readonly List<CoinItem> _allCoins = new();
     private bool _suppressCoinSelect;
+    private ScalpResult? _lastScalp; // 차트에 진입/익절/손절 표시용
 
     public MainWindow()
     {
@@ -229,6 +230,7 @@ public partial class MainWindow : Window
 
     private void RenderScalp(ScalpResult s)
     {
+        _lastScalp = s;
         var bull = (Brush)FindResource("BullBrush");
         var accent = (Brush)FindResource("AccentBrush");
         var muted = (Brush)FindResource("MutedBrush");
@@ -376,6 +378,47 @@ public partial class MainWindow : Window
         Canvas.SetLeft(priceLbl, plotW + 2);
         Canvas.SetTop(priceLbl, ly - 9);
         ChartCanvas.Children.Add(priceLbl);
+
+        // 단타 진입/익절/손절 표시 (회피가 아닐 때)
+        if (_lastScalp is { } sc && sc.Decision != ScalpDecision.Avoid)
+        {
+            var accent = (Brush)FindResource("AccentBrush");
+            bool isLong = sc.Side == TradeSide.Long;
+
+            void DrawLevel(double p, Brush b, string label)
+            {
+                double y = YOf(p);
+                ChartCanvas.Children.Add(new Line
+                {
+                    X1 = 0, X2 = plotW, Y1 = y, Y2 = y, Stroke = b, StrokeThickness = 1,
+                    StrokeDashArray = new DoubleCollection { 4, 3 }
+                });
+                var lbl = new Border
+                {
+                    Background = b, CornerRadius = new CornerRadius(3), Padding = new Thickness(4, 1, 4, 1),
+                    Child = new TextBlock { Text = label, Foreground = Brushes.Black, FontSize = 10, FontWeight = FontWeights.Bold }
+                };
+                Canvas.SetLeft(lbl, plotW + 2);
+                Canvas.SetTop(lbl, Math.Clamp(y - 9, padTop, padTop + plotH - 12));
+                ChartCanvas.Children.Add(lbl);
+            }
+
+            DrawLevel(sc.Target, bull, $"익절 {FmtP(sc.Target)}");
+            DrawLevel(sc.Stop, bear, $"손절 {FmtP(sc.Stop)}");
+            string entryTag = sc.Decision == ScalpDecision.Enter ? "진입" : "진입대기";
+            DrawLevel(sc.Entry, accent, $"{(isLong ? "▲" : "▼")}{entryTag} {FmtP(sc.Entry)}");
+
+            // 진입 화살표 (좌측)
+            double ey = YOf(sc.Entry);
+            var arrow = new TextBlock
+            {
+                Text = isLong ? "▲" : "▼", Foreground = isLong ? bull : bear,
+                FontSize = 20, FontWeight = FontWeights.Bold
+            };
+            Canvas.SetLeft(arrow, 6);
+            Canvas.SetTop(arrow, Math.Clamp(ey - 13, padTop, padTop + plotH - 20));
+            ChartCanvas.Children.Add(arrow);
+        }
 
         ChartTitle.Text = $"{SymbolBox.Text.Trim().ToUpperInvariant()}  ·  {_currentInterval}  · EMA20(노랑)/50(파랑)/200(보라)";
     }

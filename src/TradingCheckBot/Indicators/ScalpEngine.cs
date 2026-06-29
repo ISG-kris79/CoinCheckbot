@@ -251,6 +251,13 @@ public static class ScalpEngine
 
         if (reasons.Count == 0) reasons.Add(note);
 
+        // 진입 계획가: 진입이면 현재가, 대기면 눌림 목표(EMA20)에서 매수 대기
+        double planEntry = decision == ScalpDecision.Enter ? price
+                          : (!double.IsNaN(e20) && aboveEma20 ? e20 : price);
+        double planStop = Math.Min(swingLow, planEntry - atr * 0.8) - atr * 0.1;
+        double planRisk = planEntry - planStop;
+        double planTarget = planEntry + Math.Max(planRisk * 1.8, atr * 1.5);
+
         return new ScalpResult
         {
             Symbol = symbol,
@@ -262,9 +269,9 @@ public static class ScalpEngine
             Trigger = note,
             Reasons = reasons,
             Atr = atr,
-            Entry = price,
-            Target = target,
-            Stop = stop
+            Entry = planEntry,
+            Target = planTarget,
+            Stop = planStop
         };
     }
 
@@ -390,11 +397,18 @@ public static class ScalpEngine
 
         if (reasons.Count == 0) reasons.Add(note);
 
+        // 진입 계획가: 진입이면 현재가, 대기면 되돌림 목표(EMA20)에서 매도 대기
+        double planEntry = decision == ScalpDecision.Enter ? price
+                          : (!double.IsNaN(e20) && belowEma20 ? e20 : price);
+        double planStop = Math.Max(swingHigh, planEntry + atr * 0.8) + atr * 0.1;
+        double planRisk = planStop - planEntry;
+        double planTarget = planEntry - Math.Max(planRisk * 1.8, atr * 1.5);
+
         return new ScalpResult
         {
             Symbol = symbol, Interval = interval, Price = price, LastTime = c0.OpenTime,
             Decision = decision, Side = TradeSide.Short, Quality = quality, Trigger = note, Reasons = reasons,
-            Atr = atr, Entry = price, Target = target, Stop = stop
+            Atr = atr, Entry = planEntry, Target = planTarget, Stop = planStop
         };
     }
 
