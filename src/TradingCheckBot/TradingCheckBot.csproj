@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WPF 단일 프로젝트. XAML(.xaml)/코드비하인드(.xaml.cs)는 UseWPF가 자동 포함. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>TradingCheckBot</AssemblyName>
+    <RootNamespace>TradingCheckBot</RootNamespace>
+    <Version>1.0.0</Version>
+    <Product>코인선물 상하방 전략 체크봇</Product>
+    <Company>CoinFF</Company>
+    <ApplicationIcon></ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 자동 업데이트 (트레이딩봇과 동일한 Velopack 사용) -->
+    <PackageReference Include="Velopack" Version="0.0.1298" />
+  </ItemGroup>
+
+</Project>
