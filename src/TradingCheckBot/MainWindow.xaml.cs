@@ -279,29 +279,62 @@ public partial class MainWindow : Window
 
     private void ChartCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => DrawChart();
 
+    // 차트 뷰포트 상태 (팬/줌)
+    private double _barsVisible = 120;   // 가로: 보이는 봉 수 (줌)
+    private double _offsetFromEnd = 0;   // 가로: 오른쪽 끝에서 떨어진 봉 수 (팬)
+    private double _yLo, _yHi;           // 세로: 가격 범위
+    private bool _yManual;               // 세로를 사용자가 수동 조정했는가
+    private bool _viewInit;
+    private string _viewSymbol = "";
+    private double _plotW, _plotH, _padTop;
+    private bool _dragging;
+    private Point _dragStart;
+    private double _dOff0, _dBars0, _dYLo0, _dYHi0;
+
     private void DrawChart()
     {
         ChartCanvas.Children.Clear();
-        if (_candles.Count < 2) return;
+        int count = _candles.Count;
+        if (count < 2) return;
 
         double w = ChartCanvas.ActualWidth, h = ChartCanvas.ActualHeight;
         if (w <= 10 || h <= 10) return;
 
-        const int maxBars = 120;
-        var view = _candles.Count > maxBars ? _candles.GetRange(_candles.Count - maxBars, maxBars) : _candles;
-        int n = view.Count;
+        string sym = SymbolBox.Text.Trim().ToUpperInvariant();
+        if (!_viewInit || _viewSymbol != sym)
+        {
+            _barsVisible = Math.Min(120, count);
+            _offsetFromEnd = 0;
+            _yManual = false;
+            _viewInit = true;
+            _viewSymbol = sym;
+        }
+        _barsVisible = Math.Clamp(_barsVisible, 10, count);
+        _offsetFromEnd = Math.Clamp(_offsetFromEnd, -5, Math.Max(0, count - _barsVisible));
 
         double padRight = 64, padBottom = 18, padTop = 6;
         double plotW = w - padRight, plotH = h - padBottom - padTop;
+        _plotW = plotW; _plotH = plotH; _padTop = padTop;
 
-        double hi = view.Max(c => c.High);
-        double lo = view.Min(c => c.Low);
-        if (hi <= lo) return;
-        double range = hi - lo;
-        hi += range * 0.05; lo -= range * 0.05; range = hi - lo;
+        double x1 = (count - 1) - _offsetFromEnd; // 오른쪽 끝 인덱스
+        double x0 = x1 - _barsVisible + 1;        // 왼쪽 끝 인덱스
+        int iLo = Math.Max(0, (int)Math.Floor(x0));
+        int iHi = Math.Min(count - 1, (int)Math.Ceiling(x1));
 
-        double YOf(double price) => padTop + (hi - price) / range * plotH;
-        double slot = plotW / n;
+        // 세로 범위: 수동이 아니면 보이는 구간에 자동 맞춤
+        if (!_yManual)
+        {
+            double hh = double.MinValue, ll = double.MaxValue;
+            for (int i = iLo; i <= iHi; i++) { hh = Math.Max(hh, _candles[i].High); ll = Math.Min(ll, _candles[i].Low); }
+            if (hh <= ll) return;
+            double r0 = hh - ll; _yHi = hh + r0 * 0.06; _yLo = ll - r0 * 0.06;
+        }
+        double range = _yHi - _yLo;
+        if (range <= 0) return;
+
+        double XOf(double idx) => (idx - x0 + 0.5) / _barsVisible * plotW;
+        double YOf(double price) => padTop + (_yHi - price) / range * plotH;
+        double slot = plotW / _barsVisible;
         double bodyW = Math.Max(1.5, slot * 0.6);
 
         var bull = (Brush)FindResource("BullBrush");
@@ -312,7 +345,7 @@ public partial class MainWindow : Window
         // 가로 그리드 + 가격 라벨
         for (int g = 0; g <= 4; g++)
         {
-            double price = hi - range * g / 4.0;
+            double price = _yHi - range * g / 4.0;
             double y = YOf(price);
             ChartCanvas.Children.Add(new Line
             {
@@ -331,16 +364,15 @@ public partial class MainWindow : Window
 
         // EMA 오버레이
         var closes = _candles.Select(c => c.Close).ToArray();
-        int offset = _candles.Count - n;
-        DrawEmaLine(Ind.Ema(closes, 20), offset, n, slot, YOf, Color.FromRgb(0xF0, 0xB9, 0x0B));
-        DrawEmaLine(Ind.Ema(closes, 50), offset, n, slot, YOf, Color.FromRgb(0x4F, 0x9C, 0xF0));
-        DrawEmaLine(Ind.Ema(closes, 200), offset, n, slot, YOf, Color.FromRgb(0xB0, 0x7C, 0xF0));
+        DrawEmaLine(Ind.Ema(closes, 20), iLo, iHi, XOf, YOf, Color.FromRgb(0xF0, 0xB9, 0x0B));
+        DrawEmaLine(Ind.Ema(closes, 50), iLo, iHi, XOf, YOf, Color.FromRgb(0x4F, 0x9C, 0xF0));
+        DrawEmaLine(Ind.Ema(closes, 200), iLo, iHi, XOf, YOf, Color.FromRgb(0xB0, 0x7C, 0xF0));
 
         // 캔들
-        for (int i = 0; i < n; i++)
+        for (int i = iLo; i <= iHi; i++)
         {
-            var c = view[i];
-            double cx = i * slot + slot / 2.0;
+            var c = _candles[i];
+            double cx = XOf(i);
             bool up = c.Close >= c.Open;
             var brush = up ? bull : bear;
 
@@ -360,7 +392,7 @@ public partial class MainWindow : Window
         }
 
         // 현재가 라인
-        double last = view[^1].Close;
+        double last = _candles[count - 1].Close;
         double ly = YOf(last);
         ChartCanvas.Children.Add(new Line
         {
@@ -423,16 +455,84 @@ public partial class MainWindow : Window
         ChartTitle.Text = $"{SymbolBox.Text.Trim().ToUpperInvariant()}  ·  {_currentInterval}  · EMA20(노랑)/50(파랑)/200(보라)";
     }
 
-    private void DrawEmaLine(double[] ema, int offset, int n, double slot, Func<double, double> yOf, Color color)
+    private void DrawEmaLine(double[] ema, int iLo, int iHi, Func<double, double> xOf, Func<double, double> yOf, Color color)
     {
         var poly = new Polyline { Stroke = new SolidColorBrush(color), StrokeThickness = 1.3 };
-        for (int i = 0; i < n; i++)
+        for (int i = iLo; i <= iHi; i++)
         {
-            double v = ema[offset + i];
+            if (i < 0 || i >= ema.Length) continue;
+            double v = ema[i];
             if (double.IsNaN(v)) continue;
-            poly.Points.Add(new Point(i * slot + slot / 2.0, yOf(v)));
+            poly.Points.Add(new Point(xOf(i), yOf(v)));
         }
         if (poly.Points.Count > 1) ChartCanvas.Children.Add(poly);
+    }
+
+    // ───────────────────────── 차트 팬/줌 ─────────────────────────
+    private void ChartCanvas_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        int count = _candles.Count;
+        if (count < 2 || _plotW <= 0 || _plotH <= 0) return;
+        var m = e.GetPosition(ChartCanvas);
+        double f = e.Delta > 0 ? 0.85 : 1.18; // 휠 위=확대, 아래=축소
+
+        // 가로 줌 (커서 위치 기준 고정)
+        double x1 = (count - 1) - _offsetFromEnd, x0 = x1 - _barsVisible + 1;
+        double idxAt = x0 + (m.X / _plotW) * _barsVisible - 0.5;
+        double newBars = Math.Clamp(_barsVisible * f, 10, count);
+        double fx = Math.Clamp(m.X / _plotW, 0, 1);
+        double newX1 = (idxAt - fx * newBars + 0.5) + newBars - 1;
+        _offsetFromEnd = (count - 1) - newX1;
+        _barsVisible = newBars;
+
+        // 세로 줌 (커서 가격 기준 고정)
+        double range = _yHi - _yLo;
+        if (range > 0)
+        {
+            double fy = Math.Clamp((m.Y - _padTop) / _plotH, 0, 1);
+            double pAt = _yHi - fy * range;
+            double newRange = range * f;
+            _yManual = true;
+            _yHi = pAt + fy * newRange;
+            _yLo = _yHi - newRange;
+        }
+        DrawChart();
+        e.Handled = true;
+    }
+
+    private void ChartCanvas_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != System.Windows.Input.MouseButton.Left) return;
+        if (e.ClickCount == 2) { _viewInit = false; _yManual = false; DrawChart(); return; } // 더블클릭 = 초기화
+        _dragging = true;
+        _dragStart = e.GetPosition(ChartCanvas);
+        _dOff0 = _offsetFromEnd; _dBars0 = _barsVisible; _dYLo0 = _yLo; _dYHi0 = _yHi;
+        ChartCanvas.CaptureMouse();
+    }
+
+    private void ChartCanvas_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_dragging || _plotW <= 0 || _plotH <= 0) return;
+        var m = e.GetPosition(ChartCanvas);
+        double dx = m.X - _dragStart.X, dy = m.Y - _dragStart.Y;
+        // 좌우 팬 (오른쪽으로 끌면 과거 표시)
+        _offsetFromEnd = _dOff0 + dx * (_dBars0 / _plotW);
+        // 상하 팬
+        double range0 = _dYHi0 - _dYLo0;
+        if (range0 > 0)
+        {
+            _yManual = true;
+            double ppp = range0 / _plotH;
+            _yLo = _dYLo0 + dy * ppp;
+            _yHi = _dYHi0 + dy * ppp;
+        }
+        DrawChart();
+    }
+
+    private void ChartCanvas_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _dragging = false;
+        if (ChartCanvas.IsMouseCaptured) ChartCanvas.ReleaseMouseCapture();
     }
 }
 
