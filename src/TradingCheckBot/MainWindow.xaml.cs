@@ -258,7 +258,7 @@ public partial class MainWindow : Window
         string levels = s.Decision == ScalpDecision.Enter
             ? $"\n진입 {FmtP(s.Entry)} · 목표 {FmtP(s.Target)} · 손절 {FmtP(s.Stop)} (1:{s.RiskReward:F1})"
             : "";
-        ScalpNote.Text = s.Trigger + levels;
+        ScalpNote.Text = $"{s.Trigger}{levels}\n※ {_currentInterval} 확정봉 {s.LastTime:MM/dd HH:mm} 기준 (다음 봉 마감까지 유지)";
     }
 
     private static string FmtP(double v) => v >= 1000 ? v.ToString("N1") : v >= 1 ? v.ToString("N3") : v.ToString("0.######");

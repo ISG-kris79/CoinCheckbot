@@ -21,6 +21,7 @@ public partial class ScannerWindow : Window
 
     private string _interval = "5m";
     private bool _busy;
+    private bool _lastWasSearch; // 자동갱신이 마지막 실행 모드(스캔/서칭)를 유지
 
     // 코인 선택 상태
     private readonly List<SymbolPick> _allPicks = new();
@@ -30,7 +31,7 @@ public partial class ScannerWindow : Window
     {
         InitializeComponent();
         BuildTimeframeButtons();
-        _timer.Tick += async (_, _) => await ScanAsync();
+        _timer.Tick += async (_, _) => { if (_lastWasSearch) await SearchPredictAsync(); else await ScanAsync(); };
         Loaded += async (_, _) => await LoadSymbolsAsync();
     }
 
@@ -149,6 +150,7 @@ public partial class ScannerWindow : Window
             return;
         }
         _busy = true;
+        _lastWasSearch = true;
         SearchBtn.IsEnabled = false;
         ScanBtn.IsEnabled = false;
 
@@ -270,6 +272,7 @@ public partial class ScannerWindow : Window
         }
 
         _busy = true;
+        _lastWasSearch = false;
         ScanBtn.IsEnabled = false;
         int filterMode = FilterMode();
 

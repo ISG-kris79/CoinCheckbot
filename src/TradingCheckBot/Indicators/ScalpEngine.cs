@@ -55,6 +55,9 @@ public static class ScalpEngine
 {
     public static ScalpResult Evaluate(string symbol, string interval, IReadOnlyList<Candle> candles)
     {
+        // 진행 중(미완성) 봉 제외 → 확정봉으로만 판정 (실시간 깜빡임 방지, 같은 봉 동안 신호 유지)
+        if (candles.Count > 80) candles = candles.Take(candles.Count - 1).ToList();
+
         var close = candles.Select(c => c.Close).ToArray();
         var high = candles.Select(c => c.High).ToArray();
         var low = candles.Select(c => c.Low).ToArray();

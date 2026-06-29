@@ -68,6 +68,9 @@ public static class PredictEngine
 
     public static PredictResult Predict(string symbol, string interval, IReadOnlyList<Candle> candles)
     {
+        // 진행 중(미완성) 봉 제외 → 확정봉 기준 예측 (같은 봉 동안 결과 안정)
+        if (candles.Count > 120) candles = candles.Take(candles.Count - 1).ToList();
+
         int n = candles.Count;
         var close = candles.Select(c => c.Close).ToArray();
         var high = candles.Select(c => c.High).ToArray();
