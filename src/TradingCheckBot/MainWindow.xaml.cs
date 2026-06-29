@@ -174,6 +174,7 @@ public partial class MainWindow : Window
 
             var result = StrategyEngine.Evaluate(symbol, _currentInterval, candles);
             RenderResult(result);
+            RenderScalp(ScalpEngine.Evaluate(symbol, _currentInterval, candles));
             DrawChart();
 
             StatusText.Text = $"{symbol} · {_currentInterval} · 마지막 봉 {result.LastTime:yyyy-MM-dd HH:mm} · " +
@@ -225,6 +226,39 @@ public partial class MainWindow : Window
         // 지표 리스트
         SignalList.ItemsSource = r.Signals.Select(s => new SignalRow(s, bull, bear, muted)).ToList();
     }
+
+    private void RenderScalp(ScalpResult s)
+    {
+        var bull = (Brush)FindResource("BullBrush");
+        var accent = (Brush)FindResource("AccentBrush");
+        var muted = (Brush)FindResource("MutedBrush");
+
+        ScalpVerdict.Text = s.Decision switch
+        {
+            ScalpDecision.Enter => $"단타 진입 ✅ (품질 {s.Quality})",
+            ScalpDecision.Wait => "단타 대기 ⏳",
+            _ => "단타 회피 ⛔"
+        };
+        ScalpVerdict.Foreground = s.Decision switch
+        {
+            ScalpDecision.Enter => bull,
+            ScalpDecision.Wait => accent,
+            _ => muted
+        };
+        ScalpBanner.Background = s.Decision switch
+        {
+            ScalpDecision.Enter => new SolidColorBrush(Color.FromArgb(40, 38, 166, 154)),
+            ScalpDecision.Wait => new SolidColorBrush(Color.FromArgb(36, 240, 185, 11)),
+            _ => new SolidColorBrush(Color.FromArgb(34, 0, 0, 0))
+        };
+
+        string levels = s.Decision == ScalpDecision.Enter
+            ? $"\n진입 {FmtP(s.Entry)} · 목표 {FmtP(s.Target)} · 손절 {FmtP(s.Stop)} (1:{s.RiskReward:F1})"
+            : "";
+        ScalpNote.Text = s.Trigger + levels;
+    }
+
+    private static string FmtP(double v) => v >= 1000 ? v.ToString("N1") : v >= 1 ? v.ToString("N3") : v.ToString("0.######");
 
     private void UpdateGauge(double bullPercent)
     {

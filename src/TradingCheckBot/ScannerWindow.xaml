@@ -52,14 +52,17 @@
             <StackPanel>
                 <TextBlock Text="단타 상승 시그널 스캐너" Foreground="{StaticResource AccentBrush}"
                            FontSize="20" FontWeight="Bold"/>
-                <TextBlock Text="왼쪽에서 스캔할 코인을 직접 선택하세요 · 선택한 코인의 상승 진입 점수를 높은 순으로 보여줍니다 · 참고용 신호(투자 권유 아님)"
+                <TextBlock Text="선택한 코인을 진입/대기/회피로 판정 · 진입 트리거(눌림목·과매도반등·돌파재테스트·지지반등)가 떠야 진입 · 참고용(투자권유 아님)"
                            Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,3,0,0"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <CheckBox x:Name="AutoRefresh" Content="자동 스캔(30초)" Foreground="{StaticResource MutedBrush}"
                           VerticalAlignment="Center" Margin="0,0,12,0"
                           Checked="AutoRefresh_Changed" Unchecked="AutoRefresh_Changed"/>
-                <Button x:Name="ScanBtn" Content="스캔 시작" Style="{StaticResource PrimaryButton}" Click="Scan_Click"/>
+                <Button x:Name="SearchBtn" Content="🔮 예상상승 서칭" Click="Search_Click" Margin="0,0,8,0"
+                        Foreground="{StaticResource TextBrush}" Background="{StaticResource PanelBrush2}"
+                        BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" Padding="14,7" Cursor="Hand" FontWeight="Bold"/>
+                <Button x:Name="ScanBtn" Content="선택 코인 스캔" Style="{StaticResource PrimaryButton}" Click="Scan_Click"/>
             </StackPanel>
         </Grid>
 
@@ -70,13 +73,12 @@
                 <TextBlock Text="타임프레임" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="2,0,10,0"/>
                 <StackPanel x:Name="TfPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
 
-                <TextBlock Text="최소 점수" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="24,0,8,0"/>
-                <ComboBox x:Name="MinScoreBox" Width="90" Height="30" VerticalContentAlignment="Center"
-                          SelectedIndex="2">
+                <TextBlock Text="표시" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="24,0,8,0"/>
+                <ComboBox x:Name="MinScoreBox" Width="120" Height="30" VerticalContentAlignment="Center"
+                          SelectedIndex="1">
+                    <ComboBoxItem Content="진입만"/>
+                    <ComboBoxItem Content="진입+대기"/>
                     <ComboBoxItem Content="전체"/>
-                    <ComboBoxItem Content="45 이상"/>
-                    <ComboBoxItem Content="60 이상"/>
-                    <ComboBoxItem Content="75 이상"/>
                 </ComboBox>
             </StackPanel>
         </Border>
@@ -168,9 +170,9 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="순위" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
-                    <TextBlock Grid.Column="1" Text="심볼 / 등급" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
-                    <TextBlock Grid.Column="2" Text="상승 점수" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
-                    <TextBlock Grid.Column="3" Text="진입 / 목표 / 손절 · 상승 근거" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                    <TextBlock Grid.Column="1" Text="심볼 / 판정" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                    <TextBlock Grid.Column="2" Text="진입 품질" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                    <TextBlock Grid.Column="3" Text="트리거 · 진입/목표/손절 · 근거" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
                 </Grid>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="8,0,8,8">

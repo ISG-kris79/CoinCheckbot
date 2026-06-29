@@ -136,13 +136,125 @@ public partial class ScannerWindow : Window
 
     private async void Scan_Click(object sender, RoutedEventArgs e) => await ScanAsync();
 
+    // ───────────────────────── 예상상승 서칭 (과거통계 + 셋업) ─────────────────────────
+    private async void Search_Click(object sender, RoutedEventArgs e) => await SearchPredictAsync();
+
+    private async Task SearchPredictAsync()
+    {
+        if (_busy) return;
+        if (_allPicks.Count == 0)
+        {
+            EmptyHint.Visibility = Visibility.Visible;
+            EmptyHint.Text = "코인 목록을 먼저 불러온 뒤 다시 시도하세요";
+            return;
+        }
+        _busy = true;
+        SearchBtn.IsEnabled = false;
+        ScanBtn.IsEnabled = false;
+
+        try
+        {
+            // 거래대금 상위 50개를 과거 데이터로 분석 (선택과 무관하게 전체 서칭)
+            var syms = _allPicks.Take(50).Select(p => p.Symbol).ToList();
+            StatusText.Text = $"예상상승 서칭 중... 상위 {syms.Count}개 과거데이터 분석";
+
+            var rows = new ConcurrentBag<ScalpRow>();
+            int done = 0;
+            using var sem = new SemaphoreSlim(6);
+            var tasks = syms.Select(async sym =>
+            {
+                await sem.WaitAsync();
+                try
+                {
+                    var candles = await _client.GetKlinesAsync(sym, _interval, 600);
+                    if (candles.Count >= 120)
+                    {
+                        var pr = PredictEngine.Predict(sym, _interval, candles);
+                        rows.Add(BuildPredictRow(pr, _tickerMap.GetValueOrDefault(sym)));
+                    }
+                }
+                catch { /* 개별 실패 무시 */ }
+                finally
+                {
+                    int d = Interlocked.Increment(ref done);
+                    _ = Dispatcher.BeginInvoke(() => StatusText.Text = $"예상상승 서칭 중... {d}/{syms.Count}");
+                    sem.Release();
+                }
+            });
+            await Task.WhenAll(tasks);
+
+            var ranked = rows.OrderByDescending(r => r.Score).ToList();
+            for (int i = 0; i < ranked.Count; i++) ranked[i].Rank = i + 1;
+
+            ResultList.ItemsSource = ranked;
+            EmptyHint.Visibility = ranked.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            EmptyHint.Text = "데이터를 불러오지 못했습니다 (지역 차단/네트워크 확인)";
+
+            int promising = ranked.Count(r => r.Score >= 65);
+            StatusText.Text = $"서칭 완료 · {_interval} · {ranked.Count}개 · 유망 {promising}개 · 확률가중 예상상승 순 · 갱신 {DateTime.Now:HH:mm:ss}";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "오류: " + ex.Message;
+            EmptyHint.Visibility = Visibility.Visible;
+            EmptyHint.Text = "서칭 실패: " + ex.Message;
+        }
+        finally
+        {
+            SearchBtn.IsEnabled = true;
+            ScanBtn.IsEnabled = true;
+            _busy = false;
+        }
+    }
+
+    private ScalpRow BuildPredictRow(PredictResult r, BinanceClient.SymbolTicker? t)
+    {
+        var bull = (Brush)FindResource("BullBrush");
+        var bear = (Brush)FindResource("BearBrush");
+        var muted = (Brush)FindResource("MutedBrush");
+        var accent = (Brush)FindResource("AccentBrush");
+
+        Brush tier = r.Score switch
+        {
+            >= 65 => bull,
+            >= 45 => accent,
+            >= 25 => new SolidColorBrush(Color.FromRgb(0x6B, 0xCB, 0x77)),
+            _ => muted
+        };
+
+        double chg = t?.PriceChangePercent ?? 0;
+        string winTxt = r.Samples > 0 ? $"승률 {r.WinRate:F0}% · 표본 {r.Samples} · 손익비 1:{r.RiskReward:F1}" : "과거표본 부족(셋업 기준)";
+        return new ScalpRow
+        {
+            Symbol = r.Symbol,
+            Order = 0,
+            Score = (int)Math.Round(r.Score),
+            Grade = $"{r.Tier} +{r.ExpectedRisePct:F1}%",
+            GradeBrush = tier,
+            BarWidth = 146.0 * Math.Clamp(r.Score, 0, 100) / 100.0,
+            ChangeText = $"24h {(chg >= 0 ? "+" : "")}{chg:F2}%",
+            ChangeBrush = chg >= 0 ? bull : bear,
+            RrText = winTxt,
+            LevelsText = $"{r.Setup}\n진입 {Fmt(r.Entry)}  ·  목표 {Fmt(r.Target)}  ·  손절 {Fmt(r.Stop)}",
+            Reasons = r.Reasons
+        };
+    }
+
     private void AutoRefresh_Changed(object sender, RoutedEventArgs e)
     {
         if (AutoRefresh.IsChecked == true) _timer.Start();
         else _timer.Stop();
     }
 
-    private int SelectedMinScore() => (MinScoreBox.SelectedIndex) switch { 1 => 45, 2 => 60, 3 => 75, _ => 0 };
+    // 표시 필터: 0=진입만, 1=진입+대기, 2=전체
+    private int FilterMode() => MinScoreBox.SelectedIndex switch { 0 => 0, 2 => 2, _ => 1 };
+
+    private static int DecisionOrder(ScalpDecision d) => d switch
+    {
+        ScalpDecision.Enter => 0,
+        ScalpDecision.Wait => 1,
+        _ => 2
+    };
 
     private async Task ScanAsync()
     {
@@ -159,7 +271,7 @@ public partial class ScannerWindow : Window
 
         _busy = true;
         ScanBtn.IsEnabled = false;
-        int minScore = SelectedMinScore();
+        int filterMode = FilterMode();
 
         try
         {
@@ -191,21 +303,24 @@ public partial class ScannerWindow : Window
             });
             await Task.WhenAll(tasks);
 
-            var ranked = rows
-                .Where(r => r.Score >= minScore)
-                .OrderByDescending(r => r.Score)
+            var all = rows.ToList();
+            var ranked = all
+                .Where(r => r.Order <= filterMode || filterMode == 2)
+                .OrderBy(r => r.Order)
+                .ThenByDescending(r => r.Score)
                 .ToList();
 
             for (int i = 0; i < ranked.Count; i++) ranked[i].Rank = i + 1;
 
             ResultList.ItemsSource = ranked;
             EmptyHint.Visibility = ranked.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            EmptyHint.Text = rows.Count == 0
+            EmptyHint.Text = all.Count == 0
                 ? "데이터를 불러오지 못했습니다 (지역 차단/네트워크 확인)"
-                : $"최소 점수 {minScore}점 이상 종목이 없습니다";
+                : "조건에 맞는 종목이 없습니다 (필터를 넓혀보세요)";
 
-            int strong = ranked.Count(r => r.Score >= 60);
-            StatusText.Text = $"완료 · {_interval} · 선택 {symbols.Count}개 스캔 · 조건충족 {ranked.Count}개(매수우위 {strong}개) · " +
+            int enters = all.Count(r => r.Order == 0);
+            int waits = all.Count(r => r.Order == 1);
+            StatusText.Text = $"완료 · {_interval} · 선택 {symbols.Count}개 · 🟢진입 {enters} · 🟡대기 {waits} · 표시 {ranked.Count} · " +
                               $"갱신 {DateTime.Now:HH:mm:ss}";
         }
         catch (Exception ex)
@@ -228,26 +343,31 @@ public partial class ScannerWindow : Window
         var muted = (Brush)FindResource("MutedBrush");
         var accent = (Brush)FindResource("AccentBrush");
 
-        Brush grade = r.Score switch
+        Brush decBrush = r.Decision switch
         {
-            >= 75 => bull,
-            >= 60 => new SolidColorBrush(Color.FromRgb(0x6B, 0xCB, 0x77)),
-            >= 45 => accent,
+            ScalpDecision.Enter => bull,
+            ScalpDecision.Wait => accent,
             _ => muted
         };
+
+        // 진입일 때만 손익비/레벨이 의미 있음
+        string levels = r.Decision == ScalpDecision.Enter
+            ? $"{r.Trigger}\n진입 {Fmt(r.Entry)}  ·  목표 {Fmt(r.Target)}  ·  손절 {Fmt(r.Stop)}"
+            : r.Trigger;
 
         double chg = t?.PriceChangePercent ?? 0;
         return new ScalpRow
         {
             Symbol = r.Symbol,
-            Score = r.Score,
-            Grade = r.Grade,
-            GradeBrush = grade,
-            BarWidth = 146.0 * r.Score / 100.0,
+            Order = DecisionOrder(r.Decision),
+            Score = r.Quality,
+            Grade = r.DecisionText,
+            GradeBrush = decBrush,
+            BarWidth = 146.0 * r.Quality / 100.0,
             ChangeText = $"24h {(chg >= 0 ? "+" : "")}{chg:F2}%",
             ChangeBrush = chg >= 0 ? bull : bear,
-            RrText = $"손익비 1:{r.RiskReward:F1}",
-            LevelsText = $"진입 {Fmt(r.Entry)}  ·  목표 {Fmt(r.Target)}  ·  손절 {Fmt(r.Stop)}",
+            RrText = r.Decision == ScalpDecision.Enter ? $"손익비 1:{r.RiskReward:F1}" : "",
+            LevelsText = levels,
             Reasons = r.Reasons
         };
     }
@@ -287,7 +407,11 @@ public sealed class ScalpRow
 {
     public int Rank { get; set; }
     public required string Symbol { get; init; }
+    /// <summary>판정 정렬 순서 (0=진입,1=대기,2=회피)</summary>
+    public required int Order { get; init; }
+    /// <summary>진입 품질 0~100 (게이지/정렬용)</summary>
     public required int Score { get; init; }
+    /// <summary>판정 텍스트 (진입/대기/회피)</summary>
     public required string Grade { get; init; }
     public required Brush GradeBrush { get; init; }
     public required double BarWidth { get; init; }
