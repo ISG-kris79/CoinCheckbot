@@ -244,6 +244,23 @@ public static class ScalpEngine
             signals.Add(new ScalpSignal { Name = "ADX 추세", Hit = sc > 0, Score = sc, MaxScore = 8, Detail = detail });
         }
 
+        // ── 방향 12) 차트 패턴 (상승 반전/지속 패턴 가산) ───────────
+        {
+            var patterns = PatternEngine.Detect(candles);
+            var bullHits = patterns.Where(p => p.Detected && p.Direction == Bias.Bull).ToList();
+            var bearHit = patterns.Any(p => p.Detected && p.Direction == Bias.Bear);
+            double sc = 0; string detail;
+            if (bullHits.Count > 0)
+            {
+                double best = bullHits.Max(p => p.Confidence);
+                sc = Math.Round(12 * best, 1);
+                detail = string.Join(", ", bullHits.Select(p => p.Name));
+            }
+            else if (bearHit) { sc = 0; detail = "하락 패턴 — 매수 보류"; }
+            else detail = "패턴 없음";
+            signals.Add(new ScalpSignal { Name = "차트패턴", Hit = sc > 0, Score = sc, MaxScore = 12, Detail = detail });
+        }
+
         double achieved = signals.Sum(s => s.Score);
         double max = signals.Sum(s => s.MaxScore);
         int score = (int)Math.Round(100.0 * achieved / max);

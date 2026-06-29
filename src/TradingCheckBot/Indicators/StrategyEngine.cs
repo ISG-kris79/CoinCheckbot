@@ -123,6 +123,19 @@ public static class StrategyEngine
         // 7) 스토캐스틱
         signals.Add(StochSignal(stoch.K[last], stoch.D[last]));
 
+        // 8) 차트 패턴 (엘리엇·피보나치·삼각수렴·이중바닥/천장·V반등·헤드앤숄더)
+        foreach (var p in PatternEngine.Detect(candles))
+        {
+            if (!p.Detected) continue;
+            signals.Add(new IndicatorSignal
+            {
+                Name = $"📐 {p.Name}",
+                Value = $"신뢰도 {p.Confidence * 100:F0}%",
+                Direction = p.Direction,
+                Comment = p.Detail
+            });
+        }
+
         int bull = signals.Count(s => s.Direction == Bias.Bull);
         int bear = signals.Count(s => s.Direction == Bias.Bear);
         int neu = signals.Count(s => s.Direction == Bias.Neutral);

@@ -29,6 +29,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        if (v != null) VersionText.Text = $"v{v.Major}.{v.Minor}.{v.Build}";
         BuildTimeframeButtons();
         _timer.Tick += async (_, _) => await LoadAsync();
         Loaded += async (_, _) => await LoadAsync();
