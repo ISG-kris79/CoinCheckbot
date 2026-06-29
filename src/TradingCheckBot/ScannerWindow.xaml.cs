@@ -156,11 +156,9 @@ public partial class ScannerWindow : Window
 
         try
         {
-            // 선택한 코인이 있으면 그것만, 없으면 거래대금 상위 50개를 서칭
-            var selected = _allPicks.Where(p => p.IsSelected).Select(p => p.Symbol).ToList();
-            var syms = selected.Count > 0 ? selected : _allPicks.Take(50).Select(p => p.Symbol).ToList();
-            string scope = selected.Count > 0 ? $"선택 {syms.Count}개" : $"상위 {syms.Count}개";
-            StatusText.Text = $"예상상승 서칭 중... {scope} 과거데이터 분석";
+            // 선택과 무관하게 거래대금 상위 50개를 서칭
+            var syms = _allPicks.Take(50).Select(p => p.Symbol).ToList();
+            StatusText.Text = $"예상상승 서칭 중... 상위 {syms.Count}개 과거데이터 분석";
 
             var rows = new ConcurrentBag<ScalpRow>();
             int done = 0;
