@@ -9,7 +9,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>TradingCheckBot</AssemblyName>
     <RootNamespace>TradingCheckBot</RootNamespace>
-    <Version>1.1.4</Version>
+    <Version>1.1.5</Version>
     <Product>코인선물 상하방 전략 체크봇</Product>
     <Company>CoinFF</Company>
     <ApplicationIcon>app.ico</ApplicationIcon>

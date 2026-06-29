@@ -68,7 +68,7 @@ public partial class ScannerWindow : Window
         try
         {
             StatusText.Text = "코인 목록 불러오는 중...";
-            var tickers = await _client.GetTopSymbolsAsync(500); // 거래대금 순 전체
+            var tickers = await _client.GetTopSymbolsAsync(50); // 시총(거래대금) 상위 50개만
 
             var bull = (Brush)FindResource("BullBrush");
             var bear = (Brush)FindResource("BearBrush");

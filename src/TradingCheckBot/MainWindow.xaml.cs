@@ -51,7 +51,7 @@ public partial class MainWindow : Window
         {
             var bull = (Brush)FindResource("BullBrush");
             var bear = (Brush)FindResource("BearBrush");
-            var tickers = await _client.GetTopSymbolsAsync(500);
+            var tickers = await _client.GetTopSymbolsAsync(50); // 시총(거래대금) 상위 50개만
             _allCoins.Clear();
             foreach (var t in tickers)
                 _allCoins.Add(new CoinItem
