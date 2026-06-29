@@ -5,7 +5,7 @@
         MinHeight="640" MinWidth="980"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None" AllowsTransparency="True" ResizeMode="CanResize"
-        Background="Transparent"
+        Background="Transparent" Icon="app.ico"
         FontFamily="Segoe UI, Malgun Gothic">
 
     <WindowChrome.WindowChrome>
@@ -85,15 +85,77 @@
             </StackPanel>
         </Border>
 
-        <!-- 본문: 좌(차트) / 우(신호) -->
+        <!-- 본문: 좌(코인목록) / 중(차트) / 우(신호) -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="420"/>
             </Grid.ColumnDefinitions>
 
-            <!-- 차트 영역 -->
+            <!-- 코인 목록 -->
             <Border Grid.Column="0" Background="{StaticResource PanelBrush}" CornerRadius="8"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,10,0">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="코인 목록" Foreground="{StaticResource TextBrush}"
+                               FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+                    <TextBox x:Name="CoinFilterBox" Grid.Row="1" Height="30" VerticalContentAlignment="Center" Padding="8,0"
+                             Margin="0,0,0,8" FontSize="12" Background="{StaticResource PanelBrush2}"
+                             Foreground="{StaticResource TextBrush}" BorderBrush="{StaticResource BorderBrush}"
+                             CaretBrush="{StaticResource TextBrush}" TextChanged="CoinFilterBox_TextChanged"
+                             ToolTip="코인 검색 (예: BTC, SOL)"/>
+                    <Grid Grid.Row="2">
+                        <ListBox x:Name="CoinList" Background="Transparent" BorderThickness="0"
+                                 Foreground="{StaticResource TextBrush}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 SelectionChanged="CoinList_SelectionChanged">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="8,6"/>
+                                    <Setter Property="Margin" Value="0,1"/>
+                                    <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="bd" CornerRadius="5" Background="Transparent" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="bd" Property="Background" Value="{StaticResource PanelBrush2}"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="bd" Property="Background" Value="#22FFFFFF"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <TextBlock Text="{Binding Symbol}" Foreground="{StaticResource TextBrush}"
+                                                   FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding ChangeText}" Foreground="{Binding ChangeBrush}"
+                                                   FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock x:Name="CoinListHint" Text="불러오는 중..." Foreground="{StaticResource MutedBrush}"
+                                   FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- 차트 영역 -->
+            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="8"
                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,10,0">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -108,7 +170,7 @@
             </Border>
 
             <!-- 신호 패널 -->
-            <Border Grid.Column="1" Background="{StaticResource PanelBrush}" CornerRadius="8"
+            <Border Grid.Column="2" Background="{StaticResource PanelBrush}" CornerRadius="8"
                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                 <Grid Margin="14">
                     <Grid.RowDefinitions>

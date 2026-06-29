@@ -9,11 +9,16 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>TradingCheckBot</AssemblyName>
     <RootNamespace>TradingCheckBot</RootNamespace>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Product>코인선물 상하방 전략 체크봇</Product>
     <Company>CoinFF</Company>
-    <ApplicationIcon></ApplicationIcon>
+    <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 창/작업표시줄 아이콘 리소스 -->
+    <Resource Include="app.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- 자동 업데이트 (트레이딩봇과 동일한 Velopack 사용) -->

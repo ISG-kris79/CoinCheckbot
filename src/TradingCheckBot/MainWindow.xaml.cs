@@ -26,6 +26,9 @@ public partial class MainWindow : Window
     private List<Candle> _candles = new();
     private bool _busy;
 
+    private readonly List<CoinItem> _allCoins = new();
+    private bool _suppressCoinSelect;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -33,7 +36,64 @@ public partial class MainWindow : Window
         if (v != null) VersionText.Text = $"v{v.Major}.{v.Minor}.{v.Build}";
         BuildTimeframeButtons();
         _timer.Tick += async (_, _) => await LoadAsync();
-        Loaded += async (_, _) => await LoadAsync();
+        Loaded += async (_, _) =>
+        {
+            await LoadCoinListAsync();
+            await LoadAsync();
+        };
+    }
+
+    // ───────────────────────── 코인 목록 ─────────────────────────
+    private async Task LoadCoinListAsync()
+    {
+        try
+        {
+            var bull = (Brush)FindResource("BullBrush");
+            var bear = (Brush)FindResource("BearBrush");
+            var tickers = await _client.GetTopSymbolsAsync(500);
+            _allCoins.Clear();
+            foreach (var t in tickers)
+                _allCoins.Add(new CoinItem
+                {
+                    Symbol = t.Symbol,
+                    ChangeText = $"{(t.PriceChangePercent >= 0 ? "+" : "")}{t.PriceChangePercent:F1}%",
+                    ChangeBrush = t.PriceChangePercent >= 0 ? bull : bear
+                });
+            ApplyCoinFilter();
+            CoinListHint.Visibility = _allCoins.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            CoinListHint.Text = "목록 없음";
+        }
+        catch
+        {
+            CoinListHint.Visibility = Visibility.Visible;
+            CoinListHint.Text = "목록 로드 실패";
+        }
+    }
+
+    private void ApplyCoinFilter()
+    {
+        string q = CoinFilterBox.Text.Trim().ToUpperInvariant();
+        IEnumerable<CoinItem> view = _allCoins;
+        if (q.Length > 0) view = _allCoins.Where(c => c.Symbol.Contains(q, StringComparison.Ordinal));
+        var list = view.ToList();
+        string current = SymbolBox.Text.Trim().ToUpperInvariant();
+
+        _suppressCoinSelect = true;
+        CoinList.ItemsSource = list;
+        CoinList.SelectedItem = list.FirstOrDefault(c => c.Symbol == current);
+        _suppressCoinSelect = false;
+    }
+
+    private void CoinFilterBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyCoinFilter();
+
+    private async void CoinList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressCoinSelect) return;
+        if (CoinList.SelectedItem is CoinItem c)
+        {
+            SymbolBox.Text = c.Symbol;
+            await LoadAsync();
+        }
     }
 
     private void BuildTimeframeButtons()
@@ -294,6 +354,14 @@ public partial class MainWindow : Window
         }
         if (poly.Points.Count > 1) ChartCanvas.Children.Add(poly);
     }
+}
+
+/// <summary>코인 목록 1행 (UI 바인딩용)</summary>
+public sealed class CoinItem
+{
+    public required string Symbol { get; init; }
+    public required string ChangeText { get; init; }
+    public required Brush ChangeBrush { get; init; }
 }
 
 /// <summary>지표 신호를 UI 바인딩용으로 감싼 뷰모델</summary>

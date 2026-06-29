@@ -5,7 +5,7 @@
         MinHeight="640" MinWidth="900"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None" AllowsTransparency="True" ResizeMode="CanResize"
-        Background="Transparent"
+        Background="Transparent" Icon="app.ico"
         FontFamily="Segoe UI, Malgun Gothic">
 
     <WindowChrome.WindowChrome>
