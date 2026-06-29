@@ -412,8 +412,9 @@ public partial class MainWindow : Window
         Canvas.SetTop(priceLbl, ly - 9);
         ChartCanvas.Children.Add(priceLbl);
 
-        // 단타 진입/익절/손절 표시 (회피가 아닐 때)
-        if (_lastScalp is { } sc && sc.Decision != ScalpDecision.Avoid)
+        // 단타 진입/익절/손절 표시 (회피·보류가 아닐 때, 구체적 진입대기/진입만)
+        if (_lastScalp is { } sc && sc.Decision != ScalpDecision.Avoid
+            && (sc.Decision == ScalpDecision.Enter || Math.Abs(sc.Entry - last) / last > 0.0015))
         {
             var accent = (Brush)FindResource("AccentBrush");
             bool isLong = sc.Side == TradeSide.Long;

@@ -253,9 +253,20 @@ public static class ScalpEngine
 
         if (reasons.Count == 0) reasons.Add(note);
 
+        // 활발한 하락 진행 중(연속 음봉)이면 눌림 진입대기를 제시하지 않음 (칼받기 방지)
+        int consecDown = 0;
+        for (int i = last; i >= 0 && candles[i].Close < candles[i].Open; i--) consecDown++;
+
         // 진입 계획가: 진입이면 현재가, 대기면 눌림 목표(EMA20)에서 매수 대기
-        double planEntry = decision == ScalpDecision.Enter ? price
-                          : (!double.IsNaN(e20) && aboveEma20 ? e20 : price);
+        double planEntry;
+        if (decision == ScalpDecision.Enter) planEntry = price;
+        else if (consecDown >= 3)
+        {
+            planEntry = price; // 진입대기 미제시
+            note = $"하락 진행 중({consecDown}연속 음봉) — 진정 후 진입 판단";
+        }
+        else planEntry = (!double.IsNaN(e20) && aboveEma20) ? e20 : price;
+
         double planStop = Math.Min(swingLow, planEntry - atr * 0.8) - atr * 0.1;
         double planRisk = planEntry - planStop;
         double planTarget = planEntry + Math.Max(planRisk * 1.8, atr * 1.5);
