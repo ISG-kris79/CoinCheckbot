@@ -294,7 +294,7 @@ public partial class ScannerWindow : Window
                     var candles = await _client.GetKlinesAsync(sym, _interval, 500); // 메인창과 동일 개수 → 판정 일치
                     if (candles.Count >= 60)
                     {
-                        var r = ScalpEngine.Evaluate(sym, _interval, candles);
+                        var r = PlanManager.Evaluate(sym, _interval, candles);
                         rows.Add(BuildRow(r, _tickerMap.GetValueOrDefault(sym)));
                     }
                 }

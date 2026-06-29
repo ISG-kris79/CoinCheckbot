@@ -175,7 +175,7 @@ public partial class MainWindow : Window
 
             var result = StrategyEngine.Evaluate(symbol, _currentInterval, candles);
             RenderResult(result);
-            RenderScalp(ScalpEngine.Evaluate(symbol, _currentInterval, candles));
+            RenderScalp(PlanManager.Evaluate(symbol, _currentInterval, candles));
             DrawChart();
 
             StatusText.Text = $"{symbol} · {_currentInterval} · 마지막 봉 {result.LastTime:yyyy-MM-dd HH:mm} · " +

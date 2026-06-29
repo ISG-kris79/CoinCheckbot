@@ -92,11 +92,25 @@ public sealed class BinanceClient
                     double qv = Dp(t, "quoteVolume");
                     list.Add(new SymbolTicker(sym, price, chg, qv));
                 }
-                return list.OrderByDescending(x => x.QuoteVolume).Take(count).ToList();
+                // 메이저 코인을 맨 위로 고정, 나머지는 거래대금 내림차순
+                return list
+                    .OrderBy(x => MajorRank(x.Symbol))
+                    .ThenByDescending(x => x.QuoteVolume)
+                    .Take(count).ToList();
             }
             catch (Exception ex) { last = ex; }
         }
         throw new InvalidOperationException($"심볼 목록 요청 실패: {last?.Message}", last);
+    }
+
+    // 맨 위로 고정할 메이저 코인 순서 (작을수록 위)
+    private static readonly string[] Majors =
+        { "BTCUSDT", "ETHUSDT", "XRPUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "ADAUSDT" };
+
+    private static int MajorRank(string symbol)
+    {
+        int idx = Array.IndexOf(Majors, symbol);
+        return idx >= 0 ? idx : Majors.Length + 1; // 메이저 아니면 뒤로
     }
 
     private static double Dp(JsonElement obj, string name) =>
